@@ -1,6 +1,6 @@
 ﻿/*--------------------------------------------------------------------------
 * DynamicJson
-* ver 1.0.0.0 (Apr. 30th, 2010)
+* ver 1.0.0.* (Apr. 30th, 2010)
 *
 * created and maintained by neuecc <ils@neue.cc>
 * licensed under Microsoft Public License(Ms-PL)
@@ -34,9 +34,33 @@ namespace Codeplex.Data
         /// <summary>from JsonSring to DynamicJson</summary>
         public static dynamic Parse(string json)
         {
-            using (var jsonReader = JsonReaderWriterFactory.CreateJsonReader(Encoding.Unicode.GetBytes(json), XmlDictionaryReaderQuotas.Max))
+            return Parse(json, Encoding.Unicode);
+        }
+
+        /// <summary>from JsonSring to DynamicJson</summary>
+        public static dynamic Parse(string json, Encoding encoding)
+        {
+            using (var reader = JsonReaderWriterFactory.CreateJsonReader(encoding.GetBytes(json), XmlDictionaryReaderQuotas.Max))
             {
-                return ToValue(XElement.Load(jsonReader));
+                return ToValue(XElement.Load(reader));
+            }
+        }
+
+        /// <summary>from JsonSringStream to DynamicJson</summary>
+        public static dynamic Parse(Stream stream)
+        {
+            using (var reader = JsonReaderWriterFactory.CreateJsonReader(stream, XmlDictionaryReaderQuotas.Max))
+            {
+                return ToValue(XElement.Load(reader));
+            }
+        }
+
+        /// <summary>from JsonSringStream to DynamicJson</summary>
+        public static dynamic Parse(Stream stream, Encoding encoding)
+        {
+            using (var reader = JsonReaderWriterFactory.CreateJsonReader(stream, encoding, XmlDictionaryReaderQuotas.Max, _ => { }))
+            {
+                return ToValue(XElement.Load(reader));
             }
         }
 
@@ -60,7 +84,6 @@ namespace Codeplex.Data
                 case JsonType.@string:
                     return (string)element;
                 case JsonType.@object:
-                    return new DynamicJson(element, type);
                 case JsonType.array:
                     return new DynamicJson(element, type);
                 case JsonType.@null:
@@ -166,7 +189,7 @@ namespace Codeplex.Data
 
         private DynamicJson(XElement element, JsonType type)
         {
-            Debug.Assert(type != JsonType.@object || type != JsonType.array);
+            Debug.Assert(type == JsonType.array || type == JsonType.@object);
 
             xml = element;
             jsonType = type;
@@ -176,8 +199,6 @@ namespace Codeplex.Data
 
         public bool IsArray { get { return jsonType == JsonType.array; } }
 
-        public int Length { get { return GetDynamicMemberNames().Count(); } }
-
         /// <summary>has property or not</summary>
         public bool IsDefined(string name)
         {
@@ -185,10 +206,36 @@ namespace Codeplex.Data
         }
 
         /// <summary>delete property</summary>
-        public void Delete(string name)
+        public bool Delete(string name)
         {
             var elem = xml.Element(name);
-            if (elem != null) elem.Remove();
+            if (elem != null)
+            {
+                elem.Remove();
+                return true;
+            }
+            else return false;
+        }
+
+        /// <summary>mapping to Array or Class by Public PropertyName</summary>
+        public T Deserialize<T>()
+        {
+            return (T)Deserialize(typeof(T));
+        }
+
+        private object Deserialize(Type type)
+        {
+            return (IsArray) ? DeserializeArray(type) : DeserializeObject(type);
+        }
+
+        private object DeserializeValue(XElement element, Type elementType)
+        {
+            var value = ToValue(element);
+            if (value is DynamicJson)
+            {
+                value = ((DynamicJson)value).Deserialize(elementType);
+            }
+            return Convert.ChangeType(value, elementType);
         }
 
         private object DeserializeObject(Type targetType)
@@ -200,45 +247,71 @@ namespace Codeplex.Data
             {
                 PropertyInfo propertyInfo;
                 if (!dict.TryGetValue(item.Name.LocalName, out propertyInfo)) continue;
-                var value = ToValue(item);
-                if (value is DynamicJson)
-                {
-                    var json = ((DynamicJson)value);
-                    value = (json.IsArray)
-                        ? json.DeserializeArray(propertyInfo.PropertyType)
-                        : json.DeserializeObject(propertyInfo.PropertyType);
-                }
-                propertyInfo.SetValue(result, Convert.ChangeType(value, propertyInfo.PropertyType), null);
+                var value = DeserializeValue(item, propertyInfo.PropertyType);
+                propertyInfo.SetValue(result, value, null);
             }
             return result;
         }
 
         private object DeserializeArray(Type targetType)
         {
-            
-            if (targetType.IsArray)
+            if (targetType.IsArray) // Foo[]
             {
                 var elemType = targetType.GetElementType();
                 dynamic array = Array.CreateInstance(elemType, xml.Elements().Count());
                 var index = 0;
-                foreach (var item in xml.Elements()) array[index++] = Convert.ChangeType(ToValue(item),elemType);
+                foreach (var item in xml.Elements())
+                {
+                    array[index++] = DeserializeValue(item, elemType);
+                }
                 return array;
             }
-            else
+            else // List<Foo>
             {
                 var elemType = targetType.GetGenericArguments()[0];
                 dynamic list = Activator.CreateInstance(targetType);
-                foreach (var item in xml.Elements()) list.Add(Convert.ChangeType(ToValue(item), elemType));
+                foreach (var item in xml.Elements())
+                {
+                    list.Add(DeserializeValue(item, elemType));
+                }
                 return list;
             }
         }
 
-        /// <summary>mapping by Public PropertyName</summary>
-        public T Deserialize<T>() where T : new()
+        // Delete
+        public override bool TryInvoke(InvokeBinder binder, object[] args, out object result)
         {
-            if (IsArray) throw new InvalidOperationException();
+            result = Delete((string)args[0]);
+            return true;
+        }
 
-            return (T)DeserializeObject(typeof(T));
+        // IsDefined, if has args then TryGetMember
+        public override bool TryInvokeMember(InvokeMemberBinder binder, object[] args, out object result)
+        {
+            if (args.Length > 0)
+            {
+                result = null;
+                return false;
+            }
+
+            result = IsDefined(binder.Name);
+            return true;
+        }
+
+        // Deserialize or foreach(IEnumerable)
+        public override bool TryConvert(ConvertBinder binder, out object result)
+        {
+            if (binder.Type == typeof(IEnumerable))
+            {
+                result = (IsArray)
+                    ? xml.Elements().Select(x => ToValue(x))
+                    : xml.Elements().Select(x => (dynamic)new KeyValuePair<string, object>(x.Name.LocalName, ToValue(x)));
+            }
+            else
+            {
+                result = Deserialize(binder.Type);
+            }
+            return true;
         }
 
         private bool TryGet(XElement element, out object result)
@@ -315,21 +388,9 @@ namespace Codeplex.Data
                 : TrySet(binder.Name, value);
         }
 
-        public override bool TryConvert(ConvertBinder binder, out object result)
-        {
-            if (!IsArray || binder.Type != typeof(object[]))
-            {
-                result = null;
-                return false;
-            }
-
-            result = xml.Elements().Select(x => ToValue(x)).Cast<object>().ToArray();
-            return true;
-        }
-
         public override IEnumerable<string> GetDynamicMemberNames()
         {
-            return (jsonType == JsonType.@object)
+            return (IsObject)
                 ? xml.Elements().Select(x => x.Name.LocalName)
                 : xml.Elements().Select((x, i) => i.ToString());
         }
