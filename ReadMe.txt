@@ -1,6 +1,6 @@
 ﻿/*--------------------------------------------------------------------------
 * DynamicJson
-* ver 1.0.0.0 (Apr. 30th, 2010)
+* ver 1.1.0.0 (May. 06th, 2010)
 *
 * created and maintained by neuecc <ils@neue.cc>
 * licensed under Microsoft Public License(Ms-PL)
@@ -18,6 +18,8 @@ include DynamicJson.cs and Add Reference "System.Runtime.Serialization"
 
 using Codeplex.Data;
 
+// Read and Access
+
 // Parse (from JsonString to DynamicJson)
 var json = DynamicJson.Parse(@"{""foo"":""json"", ""bar"":100, ""nest"":{ ""foobar"":true } }");
 
@@ -26,22 +28,69 @@ var r2 = json.bar; // 100 - dynamic(double)
 var r3 = json.nest.foobar; // true - dynamic(bool)
 var r4 = json["nest"]["foobar"]; // can access indexer
 
-// Check Defined
-var b1 = json.IsDefined("foo"); // true
-var b2 = json.IsDefined("foooo"); // false
-
 // Operate
-json.Arr = new string[] { "NOR", "XOR" }; // Add
-json.foo = 5000; // Replace
-json.Delete("bar"); // Delete
-            
-// Serialize
-var reJson = json.ToString(); // {"foo":5000,"nest":{"foobar":true},"Arr":["NOR","XOR"]}
 
-// Access Array
-Console.WriteLine(json.Arr[1]); // XOR
-foreach (var item in (object[])json.Arr) // please cast object[]
-    Console.WriteLine(item); // NOR XOR
+// Check Defined Peroperty
+// .name() is shortcut of IsDefined("name")
+var b1_1 = json.IsDefined("foo"); // true
+var b2_1 = json.IsDefined("foooo"); // false
+var b1_2 = json.foo(); // true            
+var b2_2 = json.foooo(); // false;
+
+// Add
+json.Arr = new string[] { "NOR", "XOR" }; // Add Array
+json.Obj1 = new { }; // Add Object
+json.Obj2 = new { foo = "abc", bar = 100 }; // Add and Init
+
+// Delete
+// ("name") is shortcut of Delete("name")
+json.Delete("foo");
+json.Arr.Delete(0);
+json("bar");
+json.Arr(1);
+
+// Replace
+json.Obj1 = 5000;
+
+// Serialize
+var reJson = json.ToString(); // {"nest":{"foobar":true},"Arr":["XOR"],"Obj1":5000,"Obj2":{"foo":"abc","bar":100}}
+
+
+// Enumerate
+
+// DynamicJson - (IsArray)
+var arrayJson = DynamicJson.Parse(@"[1,10,200,300]");
+foreach (int item in arrayJson)
+{
+    Console.WriteLine(item); // 1, 10, 200, 300
+}
+
+// DynamicJson - (IsObject)
+var objectJson = DynamicJson.Parse(@"{""foo"":""json"",""bar"":100}");
+foreach (KeyValuePair<string, object> item in objectJson)
+{
+    Console.WriteLine(item.Key + ":" + item.Value); // foo:json, bar:100
+}
+
+
+// Convert/Deserialize
+
+// (type) is shortcut of Deserialize<type>()
+var array1 = arrayJson.Deserialize<int[]>();
+var array2 = (int[])arrayJson;
+int[] array3 = arrayJson;
+
+// mapping by public property name
+var foobar1 = objectJson.Deserialize<FooBar>();
+var foobar2 = (FooBar)objectJson;
+FooBar foobar3 = objectJson;
+
+// with linq
+var objectJsonList = DynamicJson.Parse(@"[{""bar"":50},{""bar"":100}]");
+var barSum = ((FooBar[])objectJsonList).Select(fb => fb.bar).Sum(); // 150
+
+
+// Serialize to JSON from Object
 
 // Serialize (from Object to JsonString)
 var obj = new
@@ -58,19 +107,29 @@ var obj = new
 // {"Name":"Foo","Age":30,"Address":{"Country":"Japan","City":"Tokyo"},"Like":["Microsoft","Xbox"]}
 var jsonStringFromObj = DynamicJson.Serialize(obj);
 
-// Composite
-dynamic root = new DynamicJson(); // create root json container
-root.obj = new { }; // add blank object
-root.obj.str = "aaa";
-root.obj.@bool = true; // if propertyName is C#'s Reserved word then put prefix "@"
-root.array = new[] { 1, 200 }; // add array
-root.obj2 = new { str2 = "bbbb", ar = new object[] { "foobar", null, 100 } }; // add object and init
+// [{"foo":"fooooo!","bar":1000},{"foo":"orz","bar":10}]
+var foobar = new FooBar[] { 
+        new FooBar { foo = "fooooo!", bar = 1000 }, 
+        new FooBar { foo = "orz", bar = 10 } };
+var jsonFoobar = DynamicJson.Serialize(foobar);
 
-// {"obj":{"str":"aaa","bool":true},"array":[1,200],"obj2":{"str2":"bbbb","ar":["foobar",null,100]}}
-Console.WriteLine(root.ToString()); 
+
+// Notice: CornerCase
+
+var nestJson = DynamicJson.Parse(@"{""tes"":10,""nest"":{""a"":0}");
+
+nestJson.nest(); // This equals json.IsDefined("nest")
+nestJson.nest("a"); // This equals json.nest.Delete("a")
+
 
 
 // History
+
+2010-05-06 ver 1.1.0.0
+Add - foreach support
+Add - Dynamic Shortcut of IsDefined,Delete,Deserialize
+Fix - Deserialize
+Delete - Length
 
 2010-04-30 ver 1.0.0.0
 1st Release

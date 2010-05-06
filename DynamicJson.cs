@@ -1,6 +1,6 @@
 ﻿/*--------------------------------------------------------------------------
 * DynamicJson
-* ver 1.0.0.* (Apr. 30th, 2010)
+* ver 1.1.0.0 (May. 06th, 2010)
 *
 * created and maintained by neuecc <ils@neue.cc>
 * licensed under Microsoft Public License(Ms-PL)
@@ -205,10 +205,28 @@ namespace Codeplex.Data
             return IsObject && (xml.Element(name) != null);
         }
 
+        /// <summary>has property or not</summary>
+        public bool IsDefined(int index)
+        {
+            return IsArray && (xml.Elements().ElementAtOrDefault(index) != null);
+        }
+
         /// <summary>delete property</summary>
         public bool Delete(string name)
         {
             var elem = xml.Element(name);
+            if (elem != null)
+            {
+                elem.Remove();
+                return true;
+            }
+            else return false;
+        }
+
+        /// <summary>delete property</summary>
+        public bool Delete(int index)
+        {
+            var elem = xml.Elements().ElementAtOrDefault(index);
             if (elem != null)
             {
                 elem.Remove();
@@ -228,7 +246,7 @@ namespace Codeplex.Data
             return (IsArray) ? DeserializeArray(type) : DeserializeObject(type);
         }
 
-        private object DeserializeValue(XElement element, Type elementType)
+        private dynamic DeserializeValue(XElement element, Type elementType)
         {
             var value = ToValue(element);
             if (value is DynamicJson)
@@ -281,7 +299,9 @@ namespace Codeplex.Data
         // Delete
         public override bool TryInvoke(InvokeBinder binder, object[] args, out object result)
         {
-            result = Delete((string)args[0]);
+            result = (IsArray)
+                ? Delete((int)args[0])
+                : Delete((string)args[0]);
             return true;
         }
 
@@ -390,9 +410,9 @@ namespace Codeplex.Data
 
         public override IEnumerable<string> GetDynamicMemberNames()
         {
-            return (IsObject)
-                ? xml.Elements().Select(x => x.Name.LocalName)
-                : xml.Elements().Select((x, i) => i.ToString());
+            return (IsArray)
+                ? xml.Elements().Select((x, i) => i.ToString())
+                : xml.Elements().Select(x => x.Name.LocalName);
         }
 
         /// <summary>Serialize to JsonString</summary>
