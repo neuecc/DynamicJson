@@ -1,6 +1,6 @@
 ﻿/*--------------------------------------------------------------------------
 * DynamicJson
-* ver 1.1.0.0 (May. 06th, 2010)
+* ver 1.2.0.0 (May. 21th, 2010)
 *
 * created and maintained by neuecc <ils@neue.cc>
 * licensed under Microsoft Public License(Ms-PL)
@@ -260,6 +260,7 @@ namespace Codeplex.Data
         {
             var result = Activator.CreateInstance(targetType);
             var dict = targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanWrite)
                 .ToDictionary(pi => pi.Name, pi => pi);
             foreach (var item in xml.Elements())
             {
@@ -321,11 +322,12 @@ namespace Codeplex.Data
         // Deserialize or foreach(IEnumerable)
         public override bool TryConvert(ConvertBinder binder, out object result)
         {
-            if (binder.Type == typeof(IEnumerable))
+            if (binder.Type == typeof(IEnumerable) || binder.Type == typeof(object[]))
             {
-                result = (IsArray)
+                var ie = (IsArray)
                     ? xml.Elements().Select(x => ToValue(x))
                     : xml.Elements().Select(x => (dynamic)new KeyValuePair<string, object>(x.Name.LocalName, ToValue(x)));
+                result = (binder.Type == typeof(object[])) ? ie.ToArray() : ie;
             }
             else
             {
