@@ -1,25 +1,21 @@
-﻿/*--------------------------------------------------------------------------
-* DynamicJson
-* ver 1.2.0.0 (May. 21th, 2010)
-*
-* created and maintained by neuecc <ils@neue.cc>
-* licensed under Microsoft Public License(Ms-PL)
-* http://neue.cc/
-* http://dynamicjson.codeplex.com/
-*--------------------------------------------------------------------------*/
+DynamicJson
+===
+dynamic json structure for C# 4.0. 
 
-// InstallGuide
+Info
+---
+Archive, import from Codeplex.
 
-Add Reference DynamicJson.dll
-or
-include DynamicJson.cs and Add Reference "System.Runtime.Serialization"
+Features
+---
 
-// HowToUse
+* Intuitive operation by "dynamic".
+* This library is only 1 class and written in 400 lines.
+* Available in NuGet [DynamicJson](http://nuget.org/List/Packages/DynamicJson)
 
-using Codeplex.Data;
-
-// Read and Access
-
+Read and Access
+---
+```csharp
 // Parse (from JsonString to DynamicJson)
 var json = DynamicJson.Parse(@"{""foo"":""json"", ""bar"":100, ""nest"":{ ""foobar"":true } }");
 
@@ -27,8 +23,12 @@ var r1 = json.foo; // "json" - dynamic(string)
 var r2 = json.bar; // 100 - dynamic(double)
 var r3 = json.nest.foobar; // true - dynamic(bool)
 var r4 = json["nest"]["foobar"]; // can access indexer
+```
 
-// Operate
+Operate
+---
+```csharp
+var json = DynamicJson.Parse(@"{""foo"":""json"", ""bar"":100, ""nest"":{ ""foobar"":true } }");
 
 // Check Defined Peroperty
 // .name() is shortcut of IsDefined("name")
@@ -57,12 +57,13 @@ dynamic newjson = new DynamicJson();
 newjson.str = "aaa";
 newjson.obj = new { foo = "bar" };
 
-// Serialize
-var reJson = json.ToString(); // {"nest":{"foobar":true},"Arr":["XOR"],"Obj1":5000,"Obj2":{"foo":"abc","bar":100}}
+// Serialize(to JSON String)
+var jsonstring = newjson.ToString(); // {"str":"aaa","obj":{"foo":"bar"}}
+```
 
-
-// Enumerate
-
+Enumerate
+---
+```csharp
 // DynamicJson - (IsArray)
 var arrayJson = DynamicJson.Parse(@"[1,10,200,300]");
 foreach (int item in arrayJson)
@@ -72,24 +73,28 @@ foreach (int item in arrayJson)
 
 // DynamicJson - (IsObject)
 var objectJson = DynamicJson.Parse(@"{""foo"":""json"",""bar"":100}");
-foreach (KeyValuePair<string, object> item in objectJson)
+foreach (KeyValuePair<string, dynamic> item in objectJson)
 {
     Console.WriteLine(item.Key + ":" + item.Value); // foo:json, bar:100
 }
+```
 
-
-// Convert/Deserialize
-
+Convert/Deserialize
+---
+```csharp
 public class FooBar
 {
     public string foo { get; set; }
     public int bar { get; set; }
 }
 
+var arrayJson = DynamicJson.Parse(@"[1,10,200,300]");
+var objectJson = DynamicJson.Parse(@"{""foo"":""json"",""bar"":100}");
+
 // (type) is shortcut of Deserialize<type>()
 var array1 = arrayJson.Deserialize<int[]>();
-var array2 = (int[])arrayJson;
-int[] array3 = arrayJson;
+var array2 = (int[])arrayJson; // equals array1
+int[] array3 = arrayJson; // equals array2
 
 // mapping by public property name
 var foobar1 = objectJson.Deserialize<FooBar>();
@@ -100,9 +105,11 @@ FooBar foobar3 = objectJson;
 var objectJsonList = DynamicJson.Parse(@"[{""bar"":50},{""bar"":100}]");
 var barSum = ((FooBar[])objectJsonList).Select(fb => fb.bar).Sum(); // 150
 var dynamicWithLinq = ((dynamic[])objectJsonList).Select(d => d.bar);
+```
 
-// Serialize to JSON from Object
-
+Serialize (to JSON String from Object)
+---
+```csharp
 // Serialize (from Object to JsonString)
 var obj = new
 {
@@ -123,10 +130,11 @@ var foobar = new FooBar[] {
         new FooBar { foo = "fooooo!", bar = 1000 }, 
         new FooBar { foo = "orz", bar = 10 } };
 var jsonFoobar = DynamicJson.Serialize(foobar);
+```
 
-
-// Notice: CornerCase
-
+Notice: corner case
+---
+```csharp
 var nestJson = DynamicJson.Parse(@"{""tes"":10,""nest"":{""a"":0}");
 
 nestJson.nest(); // This equals json.IsDefined("nest")
@@ -136,19 +144,41 @@ nestJson.nest("a"); // This equals json.nest.Delete("a")
 var json = DynamicJson.Parse(@"{""int"":10,""event"":null}");
 var r1 = json.@int; // 10.0
 var r2 = json.@event; // null
+```
 
+Example : TwitterAPI
+---
 
-// History
+```csharp
+static void Main()
+{
+    var publicTL = new WebClient().DownloadString(@"http://twitter.com/statuses/public_timeline.json");
+    var statuses = DynamicJson.Parse(publicTL);
+    foreach (var status in statuses)
+    {
+        Console.WriteLine(status.user.screen_name);
+        Console.WriteLine(status.text);
+    }
+}
+```
 
-2010-05-21 ver 1.2.0.0
-Fix - Deserialize(cast) can't convert to dynamic[]
-Fix - Deserialize(cast) throw exception if has getonly property
+Example : TwitterAPI2
+---
 
-2010-05-06 ver 1.1.0.0
-Add - foreach support
-Add - Dynamic Shortcut of IsDefined,Delete,Deserialize
-Fix - Deserialize
-Delete - Length
+```csharp
+static void Main(string[] args)
+{
+    // fetch and flatten user_timeline
+    var wc = new WebClient();
+    var statuses = Enumerable.Range(1, 5)
+        .Select(i =>
+            wc.DownloadString("http://twitter.com/statuses/user_timeline/neuecc.json?page=" + i))
+        .SelectMany(s => (dynamic[])DynamicJson.Parse(s))
+        .OrderBy(j => j.id);
 
-2010-04-30 ver 1.0.0.0
-1st Release
+    foreach (var status in statuses)
+    {
+        Console.WriteLine(status.text);
+    }
+}
+```
